@@ -1,0 +1,101 @@
+#!/bin/bash
+
+# Copyright (C) 2013 NEC de Colombia/TX-NOC
+# Author: Carlos Uribe <cauribe@nec.com.co>
+
+statisticalMode() {
+	mode=`perl -le 'map{\$count{\$_}++} @ARGV; @m = sort {\$count{\$b} <=> \$count{\$a}} keys %count; print @m[0];' ${sample[@]}`
+}
+
+ne=$1
+ip=$2
+eqp_type=$3
+zone=$4
+status=$5
+
+BASE_PATH=$6			# Where to find dependencies
+OUT_FILE=$7				# Output file
+PING_TIMEOUT=$8			# ICMP ping timeout in seconds
+TOTAL_HITS=$9			# Number of iterations
+DELAY=${10}				# Job idle time window (time expression)
+PROGRESS=${11}			# Progress against overall process
+
+post_process=1
+ping_sample=""
+conn_sample=""
+
+echo "$PROGRESS - `date \"+%H:%M:%S\"`"
+echo "$ne ($ip), $eqp_type, $zone"
+
+for (( hit_count=0; hit_count < $TOTAL_HITS; hit_count++ ))
+do
+	# Skip on Unmanage status
+	if [ "$status" == "Unmanage" ]
+	then
+		ping_response="Unmanage"
+		conn_response="Unmanage,Unmanage"
+		post_process=0
+		break
+	fi
+	
+	conn_response=`java -cp $BASE_PATH/nec-snmp-manager.jar com.nec.snmp.manager.CommunicationManager $ip -type="$eqp_type" -snmp -http -short`
+	snmp_response=`echo $conn_response | cut -d "," -f1`
+	access_response=`echo $conn_response | cut -d "," -f2`
+
+	# Skip ping requests on numeric answers
+	if [[ "$snmp_response" =~ ^[0-9]+$ ]] && [[ "$access_response" =~ ^[0-9]+$ || "$access_response" == "HTTP recibido" ]]
+	then
+		ping_response="Con respuesta"
+		post_process=0
+		break
+	else
+		ping_response=`ping $ip $PING_TIMEOUT`
+	fi
+
+	case $ping_response in
+		*alive*)
+			ping_response="Con respuesta"
+			;;
+		*)
+			ping_response="Sin respuesta"
+			;;
+	esac
+
+	ping_sample+=(`echo "$ping_response" | tr " " "_"`)
+	conn_sample+=(`echo "$conn_response" | tr " " "_"`)
+
+	echo "(hit$hit_count) $ping_response,$conn_response"
+done
+
+# Find mode values for ping and connection samples
+if [ $post_process -eq 1 ]
+then
+	sample=${ping_sample[@]}
+	statisticalMode
+	ping_response=`echo "$mode" | tr "_" " "`
+
+	sample=${conn_sample[@]}
+	statisticalMode
+	conn_response=`echo "$mode" | tr "_" " "`
+fi
+
+# Survey probe data for the final analysis
+snmp_response=`echo $conn_response | cut -d "," -f1`
+access_response=`echo $conn_response | cut -d "," -f2`
+
+if [ "$ping_response" == "Unmanage" ]; then
+	survey="No administrable"
+elif [ "$ping_response" == "Sin respuesta" ]; then
+	survey="Sin gestion"
+elif [ "$snmp_response" == "Null" ] && [[ "$access_response" == "Null" && "$eqp_type" =~ .*NEO.* || "$access_response" =~ .*HTTP.* ]]
+then
+	survey="Mal configurado"	
+else
+	survey="En gestion"
+fi
+
+echo "(final) $ping_response,$conn_response"
+echo -e "Respuesta: $survey\n"
+echo "`date \"+%Y/%m/%d %H:%M:%S\"`,$ne,$ip,$eqp_type,$zone,$status,$ping_response,$conn_response,$survey" >> $OUT_FILE
+
+# echo necping-lib "\"$ne\"" $ip "\"$eqp_type\"" "\"$zone\"" $status "\"$BASE_PATH\"" "\"$OUT_FILE\"" $PING_TIMEOUT $TOTAL_HITS "\"$DELAY\" \"$PROGRESS\" &> /dev/null" | at now + $DELAY

@@ -1,0 +1,86 @@
+#!/bin/bash
+
+# Copyright (C) 2013 NEC de Colombia/TX-NOC
+# Author: Carlos Uribe <cauribe@nec.com.co>
+
+usage() {
+  echo "Uso: necping ARCHIVO_CSV"
+  echo "Multi-ping y gestion de conectividad SNMP y HTTP radios microondas NEC."
+  echo "  (+) Familia Pasolink Series V4, Mx, NEO (Std, HP, CPV) y Plus STM-1 estan soportadas."
+  echo "  (+) Familia iPasolink Series 100, 200, 400 y 1000 estan soportadas."
+  echo "ARCHIVO_CSV contiene: 'ne', 'ip', 'tipo', 'subred' y 'gestion' separados por coma, sin encabezados."
+}
+
+execConnJobs() {
+	records=`cat $OUT_FILE | wc -l`
+	progress="[$target_count/$TOTAL_TARGETS] `echo \"100 * $records / $TOTAL_TARGETS\" | bc -l | xargs printf \"%.2f\"`%"
+	necping-lib "$ne" $ip "$eqp_type" "$zone" "$status" "$BASE_PATH" "$OUT_FILE" $PING_TIMEOUT $TOTAL_HITS "$STEP" "$progress"
+}
+
+waitForks() {
+	for job in "${current_jobs[@]}"
+	do
+		wait $job
+	done
+}
+
+# Check arguments
+[ ! -n $1 ] && { echo "Error: argumento requerido"; usage; exit 1; }
+
+# Validate whether input file exists
+[ ! -f $1 ] && { echo "Error: archivo '$1' no encontrado"; usage; exit 64; }
+
+# DOS/Win to Unix, semi-colon to comma and IP address file normalization
+TMP_PREF=".tmp"
+cat $1 | tr -d "\015" | tr ";" "," | sed "s/\.[0]*/./g" | sed "s/,[0]*/,/g" | sed "s/\.\./.0./g" > "$1$TMP_PREF"
+mv "$1$TMP_PREF" $1
+
+# Config
+MAX_FORKS=20 			# Max concurrent processes
+PING_TIMEOUT=2		# ICMP ping timeout in seconds
+TOTAL_HITS=6			# Number of iterations
+STEP="0"					# Job idle time window (time expression)
+
+BASE_PATH="/auto"
+OUT_INFIX=`echo $1 | sed "s/\..*//g"`
+OUT_FILE="Gestion-$OUT_INFIX-`date +%Y%m%d`.csv"
+
+# Globals
+IFS=","
+fork_count=0
+hit_count=0
+target_count=1
+
+TOTAL_TARGETS=`cat $1 | wc -l | bc`
+
+# Helper or output streams creation
+> $OUT_FILE
+
+# Title
+echo "========== NECPING: diagnostico de conectividad de radios =========="
+echo "Inicio: `date`"
+echo
+echo "Fecha/Hora,Elemento de Red,Direccion IP,Tipo de Equipo,Subred,Gestion,Ping,SNMP,SNMP2/HTTP,Estado" >> $OUT_FILE
+
+# Forked multi-ping and connection check through SNMP and HTTP
+while read ne region zone eqp_type pcm_type one ip status maint pmon io cdata cdrxl lpdc pcmver bpcmver pcmser comm connst
+do
+	if [ $fork_count -gt $MAX_FORKS ]
+	then
+		waitForks
+		fork_count=0
+	fi
+	
+	execConnJobs #& not forked
+	current_jobs[$fork_count]=$!
+
+	fork_count=`expr $fork_count +| 1`
+	target_count=`expr $target_count + 1`
+done < $1
+
+waitForks
+
+echo
+echo "Finalizado: `date`"
+
+exit 0
