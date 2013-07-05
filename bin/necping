@@ -1,0 +1,105 @@
+#!/bin/bash
+
+# Copyright (C) 2013 NEC de Colombia/TX-NOC
+# Author: Carlos Uribe <cauribe@nec.com.co>
+
+usage() {
+  echo "Usage: necping CSV_FILE"
+  echo "ICMP/SNMP/HTTP connection manager for NEC microwave radio equipment."
+  echo "The following series are supported:"
+  echo "  (+) Pasolink V3, V4, PLUS (STM-1), Mx, NEO (STD, HP, CPV)."
+  echo "  (+) iPasolink 100, 200, 400, 1000."
+  echo "CSV_FILE contains targets extracted from a PNMSj NeList file."
+}
+
+execConnJobs() {
+	records=`cat $OUT_FILE | wc -l`
+	progress="[$target_count/$TOTAL_TARGETS] `echo \"100 * $records / $TOTAL_TARGETS\" | bc -l | xargs printf \"%.2f\"`%"
+	necping-lib "$ne" $ip "$eqp_type" "$zone" "$status" "$BASE_PATH" "$OUT_FILE" $PING_TIMEOUT $TOTAL_HITS "$STEP" "$progress"
+}
+
+waitForks() {
+	for job in "${current_jobs[@]}"
+	do
+		wait $job
+	done
+}
+
+# Check arguments
+[ ! -n $1 ] && { echo "Error: required argument"; usage; exit 1; }
+
+# Validate whether input file exists
+[ ! -f $1 ] && { echo "Error: file '$1' was not found"; usage; exit 64; }
+
+# DOS/Win to Unix, semi-colon to comma and IP address file normalization
+TMP_PREF=".tmp"
+cat $1 | tr -d "\015" | tr ";" "," | sed "s/\.[0]*/./g" | sed "s/,[0]*/,/g" | sed "s/\.\./.0./g" > "$1$TMP_PREF"
+mv "$1$TMP_PREF" $1
+
+
+########## Tool Configuration ##########
+
+# ICMP ping timeout in seconds
+PING_TIMEOUT=2
+
+# Number of iterations
+TOTAL_HITS=6
+
+# Job idle time window (Unix 'at' time expression)
+STEP="0"
+
+# Max concurrent processes
+MAX_FORKS=20
+
+# Base path for operations
+BASE_PATH="/auto"
+
+# Output filename prefix
+OUT_PREFIX="Gestion"
+
+########################################
+
+# Globals
+IFS=","
+fork_count=0
+hit_count=0
+target_count=1
+
+TOTAL_TARGETS=`cat $1 | wc -l | bc`
+OUT_INFIX=`echo $1 | sed "s/\..*//g"`
+OUT_FILE="$OUT_PREFIX-$OUT_INFIX-`date +%Y%m%d`.csv"
+
+# Helper streams creation
+> $OUT_FILE
+
+# Title
+echo "========== NECPING: ICMP/SNMP/HTTP connection manager =========="
+echo "Start: `date`"
+echo
+echo "Date/Time,Network Element,IP Address,Equipment Type,Network,PNMS Connect,Ping,SNMP(Counter),SNMP/HTTP(Access),Connectivity" >> $OUT_FILE
+
+# Forked multi-ping and connection check through SNMP and HTTP
+while read ne region zone eqp_type pcm_type one ip status maint pmon io cdata cdrxl lpdc pcmver bpcmver pcmser comm connst
+do
+	if [ "$ne" != "Network Element Name" ]
+	then
+		if [ $fork_count -gt $MAX_FORKS ]
+		then
+			waitForks
+			fork_count=0
+		fi
+	
+		execConnJobs #& not forked this time
+		current_jobs[$fork_count]=$!
+
+		fork_count=`expr $fork_count + 1`
+		target_count=`expr $target_count + 1`
+	fi
+done < $1
+
+waitForks
+
+echo
+echo "End: `date`"
+
+exit 0
