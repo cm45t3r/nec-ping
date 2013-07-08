@@ -17,7 +17,7 @@ BASE_PATH=$6			# Where to find dependencies
 OUT_FILE=$7				# Output file
 PING_TIMEOUT=$8			# ICMP ping timeout in seconds
 TOTAL_HITS=$9			# Number of iterations
-DELAY=${10}				# Job idle time window (time expression)
+STEP=${10}				# Job idle time window (time expression)
 PROGRESS=${11}			# Progress against overall process
 
 post_process=1
@@ -28,7 +28,7 @@ echo "$PROGRESS - `date \"+%H:%M:%S\"`"
 echo "$ne ($ip)"
 echo "|_Type: $eqp_type"
 echo "|_Zone: $zone"
-echo "|_Connection Check:"
+echo "|_Connection Check />"
 
 for (( hit_count=0; hit_count < $TOTAL_HITS; hit_count++ ))
 do
@@ -67,7 +67,7 @@ do
 	ping_sample+=(`echo "$ping_response" | tr " " "_"`)
 	conn_sample+=(`echo "$conn_response" | tr " " "_"`)
 
-	echo "    [Hit$hit_count] $ping_response,$conn_response"
+	echo "   [Hit$hit_count] $ping_response,$conn_response"
 done
 
 # Find statistical mode for ping and connection samples
@@ -92,13 +92,15 @@ elif [ "$ping_response" == "No ICMP answer" ]; then
 	survey="Offline"
 elif [ "$snmp_response" == "Null" ] && [[ "$access_response" == "Null" && "$eqp_type" =~ .*NEO.* || "$access_response" =~ .*HTTP.* ]]
 then
-	survey="Online with errors"	
+	survey="Online with errors"
 else
 	survey="Online"
 fi
 
-echo "    [Mode] $ping_response,$conn_response"
+echo "   [Mode] $ping_response,$conn_response"
 echo -e "|_Status: $survey\n"
 echo "`date \"+%Y/%m/%d %H:%M:%S\"`,$ne,$ip,$eqp_type,$zone,$status,$ping_response,$conn_response,$survey" >> $OUT_FILE
 
-# echo necping-lib "\"$ne\"" $ip "\"$eqp_type\"" "\"$zone\"" $status "\"$BASE_PATH\"" "\"$OUT_FILE\"" $PING_TIMEOUT $TOTAL_HITS "\"$DELAY\" \"$PROGRESS\" &> /dev/null" | at now + $DELAY
+if [ "$STEP" != "0" ]; then
+	echo necping-lib "\"$ne\"" $ip "\"$eqp_type\"" "\"$zone\"" $status "\"$BASE_PATH\"" "\"$OUT_FILE\"" $PING_TIMEOUT $TOTAL_HITS "\"$STEP\" \"$PROGRESS\" &> /dev/null" | at now + $STEP
+fi

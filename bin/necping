@@ -4,7 +4,7 @@
 # Author: Carlos Uribe <cauribe@nec.com.co>
 
 usage() {
-  echo "Usage: necping CSV_FILE"
+  echo "Usage: necping CSV_FILE [options]"
   echo "ICMP/SNMP/HTTP connection manager for NEC microwave radio equipment."
   echo "The following series are supported:"
   echo "  (+) Pasolink V3, V4, PLUS (STM-1), Mx, NEO (STD, HP, CPV)."
@@ -73,26 +73,28 @@ OUT_FILE="$OUT_PREFIX-$OUT_INFIX-`date +%Y%m%d`.csv"
 > $OUT_FILE
 
 # Title
-echo "========== NECPING: ICMP/SNMP/HTTP connection manager =========="
+echo "========== NECPING: ICMP/SNMP/HTTP Connection Manager =========="
 echo "Start: `date`"
 echo
-echo "Date/Time,Network Element,IP Address,Equipment Type,Network,PNMS Connect,Ping,SNMP(Counter),SNMP/HTTP(Access),Connectivity" >> $OUT_FILE
+echo "Date/Time,Network Element,IP Address,Equipment Type,Network,PNMS Connect,Ping,SNMP(Counter),SNMP/HTTP(Access),Status" >> $OUT_FILE
 
 # Forked multi-ping and connection check through SNMP and HTTP
 while read ne region zone eqp_type pcm_type one ip status maint pmon io cdata cdrxl lpdc pcmver bpcmver pcmser comm connst
 do
-	if [ "$ne" != "Network Element Name" ]
-	then
-		if [ $fork_count -gt $MAX_FORKS ]
-		then
-			waitForks
-			fork_count=0
-		fi
-	
-		execConnJobs #& not forked this time
-		current_jobs[$fork_count]=$!
+	if [ "$ne" != "Network Element Name" ]; then
+		if [ "$2" == "-parallel" ]; then
+			if [ $fork_count -gt $MAX_FORKS ]; then
+				waitForks
+				fork_count=0
+			fi
 
-		fork_count=`expr $fork_count + 1`
+			execConnJobs &
+			current_jobs[$fork_count]=$!
+			fork_count=`expr $fork_count + 1`
+		else
+			execConnJobs
+		fi
+		
 		target_count=`expr $target_count + 1`
 	fi
 done < $1
