@@ -16,9 +16,10 @@ status=$5
 BASE_PATH=$6			# Where to find dependencies
 OUT_FILE=$7				# Output file
 PING_TIMEOUT=$8			# ICMP ping timeout in seconds
-TOTAL_HITS=$9			# Number of iterations
-STEP=${10}				# Job idle time window (time expression)
-PROGRESS=${11}			# Progress against overall process
+PING_PACKSIZE=$9 		# ICMP ping packet size in bytes
+TOTAL_HITS=${10}		# Number of iterations
+STEP=${11}				# Job idle time window (time expression)
+PROGRESS=${12}			# Progress against overall process
 
 post_process=1
 ping_sample=""
@@ -44,23 +45,22 @@ do
 	conn_response=`java -cp $BASE_PATH/nec-snmp-manager.jar com.nec.snmp.manager.CommunicationManager $ip -type="$eqp_type" -snmp -http -short`
 	snmp_response=`echo $conn_response | cut -d "," -f1`
 	access_response=`echo $conn_response | cut -d "," -f2`
+	ping_rtt=`python $BASE_PATH/lveping.py $ip $PING_TIMEOUT $PING_PACKSIZE`
 
-	# Skip ping requests on numeric answers and http received
+	# Ensure ping requests on numeric answers and http received
 	if [[ "$snmp_response" =~ ^[0-9]+$ ]] && [[ "$access_response" =~ ^[0-9]+$ || "$access_response" == "HTTP answer" ]]
 	then
 		ping_response="ICMP answer"
 		post_process=0
 		break
-	else
-		ping_response=`ping $ip $PING_TIMEOUT`
 	fi
 
-	case $ping_response in
-		*alive*)
-			ping_response="ICMP answer"
+	case $ping_rtt in
+		*None*)
+			ping_response="No ICMP answer"
 			;;
 		*)
-			ping_response="No ICMP answer"
+			ping_response="ICMP answer"
 			;;
 	esac
 
@@ -97,10 +97,10 @@ else
 	survey="Online"
 fi
 
-echo "   [Mode] $ping_response,$conn_response"
+echo "   [Mode] $ping_response($ping_rtt ms),$conn_response"
 echo -e "|_Status: $survey\n"
-echo "`date \"+%Y/%m/%d %H:%M:%S\"`,$ne,$ip,$eqp_type,$zone,$status,$ping_response,$conn_response,$survey" >> $OUT_FILE
+echo "`date \"+%Y/%m/%d %H:%M:%S\"`,$ne,$ip,$eqp_type,$zone,$status,$ping_response,$conn_response,$survey,$ping_rtt" >> $OUT_FILE
 
 if [ "$STEP" != "0" ]; then
-	echo necping-lib "\"$ne\"" $ip "\"$eqp_type\"" "\"$zone\"" $status "\"$BASE_PATH\"" "\"$OUT_FILE\"" $PING_TIMEOUT $TOTAL_HITS "\"$STEP\" \"$PROGRESS\" &> /dev/null" | at now + $STEP
+	echo necping-lib "\"$ne\"" "\"$ip\"" "\"$eqp_type\"" "\"$zone\"" "\"$status\"" "\"$BASE_PATH\"" "\"$OUT_FILE\"" $PING_TIMEOUT $PING_PACKSIZE $TOTAL_HITS "\"$STEP\" \"$PROGRESS\" &> /dev/null" | at now + $STEP
 fi

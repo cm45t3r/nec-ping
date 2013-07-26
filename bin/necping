@@ -15,7 +15,7 @@ usage() {
 execConnJobs() {
 	records=`cat $OUT_FILE | wc -l`
 	progress="[$target_count/$TOTAL_TARGETS] `echo \"100 * $records / $TOTAL_TARGETS\" | bc -l | xargs printf \"%.2f\"`%"
-	necping-lib "$ne" $ip "$eqp_type" "$zone" "$status" "$BASE_PATH" "$OUT_FILE" $PING_TIMEOUT $TOTAL_HITS "$STEP" "$progress"
+	necping-lib "$ne" "$ip" "$eqp_type" "$zone" "$status" "$BASE_PATH" "$OUT_FILE" $PING_TIMEOUT $PING_PACKSIZE $TOTAL_HITS "$STEP" "$progress"
 }
 
 waitForks() {
@@ -40,7 +40,10 @@ mv "$1$TMP_PREF" $1
 ########## Tool Configuration ##########
 
 # ICMP ping timeout in seconds
-PING_TIMEOUT=2
+PING_TIMEOUT=1
+
+# ICMP ping packet size in bytes
+PING_PACKSIZE=1
 
 # Number of iterations
 TOTAL_HITS=6
@@ -76,7 +79,7 @@ OUT_FILE="$OUT_PREFIX-$OUT_INFIX-`date +%Y%m%d`.csv"
 echo "========== NECPING: ICMP/SNMP/HTTP Connection Manager =========="
 echo "Start: `date`"
 echo
-echo "Date/Time,Network Element,IP Address,Equipment Type,Network,PNMS Connect,Ping,SNMP(Counter),SNMP/HTTP(Access),Status" >> $OUT_FILE
+echo "Date/Time,Network Element,IP Address,Equipment Type,Network,PNMS Connect,Ping,SNMP(Counter),SNMP/HTTP(Access),Status,RTT(ms)" >> $OUT_FILE
 
 # Forked multi-ping and connection check through SNMP and HTTP
 while read ne region zone eqp_type pcm_type one ip status maint pmon io cdata cdrxl lpdc pcmver bpcmver pcmser comm connst

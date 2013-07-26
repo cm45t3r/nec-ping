@@ -14,6 +14,6 @@ if __name__ == '__main__':
 
 	if rtt != None:
 		rtt = rtt * 1000
-		print "%0.2f ms" % rtt
+		print "%0.2f" % rtt
 	else:
 		print rtt
