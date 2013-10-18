@@ -90,7 +90,9 @@ if [ "$ping_response" == "Unmanage" ]; then
 	survey="Unmanaged"
 elif [ "$ping_response" == "No ICMP answer" ]; then
 	survey="Offline"
-elif [ "$snmp_response" == "Null" ] && [[ "$access_response" == "Null" && "$eqp_type" =~ .*NEO.* || "$access_response" =~ .*HTTP.* ]]
+elif [[ "$snmp_response" == "No SNMP answer" && "$access_response" == "HTTP answer" ]]; then
+	survey="Online with errors"
+elif [ "$snmp_response" == "Null" ] && [[ "$access_response" == "Null" && "$eqp_type" =~ .*NEO.* || "$access_response" == "No HTTP answer" ]]
 then
 	survey="Online with errors"
 else
