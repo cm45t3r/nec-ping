@@ -45,7 +45,7 @@ do
 	conn_response=`java -cp $BASE_PATH/nec-snmp-manager.jar com.nec.snmp.manager.CommunicationManager $ip -type="$eqp_type" -snmp -http -short`
 	snmp_response=`echo $conn_response | cut -d "," -f1`
 	access_response=`echo $conn_response | cut -d "," -f2`
-	ping_rtt=`python $BASE_PATH/lveping.py $ip $PING_TIMEOUT $PING_PACKSIZE`
+	ping_rtt=`python rawping $ip $PING_TIMEOUT $PING_PACKSIZE`
 
 	# Ensure ping requests on numeric answers and http received
 	if [[ "$snmp_response" =~ ^[0-9]+$ ]] && [[ "$access_response" =~ ^[0-9]+$ || "$access_response" == "HTTP answer" ]]
