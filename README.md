@@ -27,5 +27,5 @@ MAX_FORKS=20
 BASE_PATH="/auto"
 
 # Output filename prefix
-OUT_PREFIX="Gestion"
+OUT_PREFIX="Mgm"
 ```
